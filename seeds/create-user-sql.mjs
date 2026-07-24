@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -9,19 +9,35 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Load .env.local
 const envPath = join(__dirname, '..', '.env.local');
-const envContent = readFileSync(envPath, 'utf-8');
-for (const line of envContent.split('\n')) {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith('#')) continue;
-  const eqIdx = trimmed.indexOf('=');
-  if (eqIdx === -1) continue;
-  const key = trimmed.slice(0, eqIdx).trim();
-  const value = trimmed.slice(eqIdx + 1).trim();
-  process.env[key] = value;
+if (existsSync(envPath)) {
+  const envContent = readFileSync(envPath, 'utf-8');
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const value = trimmed.slice(eqIdx + 1).trim();
+    if (!process.env[key]) process.env[key] = value;
+  }
 }
 
-const PASSWORD = encodeURIComponent('@Me_Helvent26%_x');
-const CONNECTION_STRING = `postgresql://postgres:${PASSWORD}@db.svernsspkeauzeiooskd.supabase.co:5432/postgres`;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const dbPassword = process.env.SUPABASE_DB_PASSWORD;
+
+if (!supabaseUrl) {
+  console.error('Missing NEXT_PUBLIC_SUPABASE_URL in environment or .env.local');
+  process.exit(1);
+}
+if (!dbPassword) {
+  console.error('Missing SUPABASE_DB_PASSWORD in environment or .env.local');
+  process.exit(1);
+}
+
+// Extract project ref from URL: https://<ref>.supabase.co
+const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
+const encodedPassword = encodeURIComponent(dbPassword);
+const CONNECTION_STRING = `postgresql://postgres:${encodedPassword}@db.${projectRef}.supabase.co:5432/postgres`;
 
 async function main() {
   console.log('Connecting...');
@@ -42,29 +58,32 @@ async function main() {
   }
 
   // Create user in auth.users with confirmed email
-  const { rows } = await client.query(`
-    INSERT INTO auth.users (
-      instance_id, id, aud, role, email, encrypted_password,
-      email_confirmed_at, raw_user_meta_data, created_at, updated_at,
-      confirmation_token, email_change, email_change_token_new, recovery_token
-    ) VALUES (
-      '00000000-0000-0000-0000-000000000000',
-      gen_random_uuid(),
-      'authenticated',
-      'authenticated',
-      'helvent_art@163.com',
-      crypt('@Me_Helvent26%_x', gen_salt('bf')),
-      now(),
-      '{"full_name": "Helvent"}',
-      now(),
-      now(),
-      '',
-      '',
-      '',
-      ''
-    )
-    RETURNING id, email
-  `);
+  const { rows } = await client.query({
+    text: `
+      INSERT INTO auth.users (
+        instance_id, id, aud, role, email, encrypted_password,
+        email_confirmed_at, raw_user_meta_data, created_at, updated_at,
+        confirmation_token, email_change, email_change_token_new, recovery_token
+      ) VALUES (
+        '00000000-0000-0000-0000-000000000000',
+        gen_random_uuid(),
+        'authenticated',
+        'authenticated',
+        $1,
+        crypt($2, gen_salt('bf')),
+        now(),
+        '{"full_name": "Helvent"}',
+        now(),
+        now(),
+        '',
+        '',
+        '',
+        ''
+      )
+      RETURNING id, email
+    `,
+    values: ['helvent_art@163.com', dbPassword],
+  });
 
   console.log(`User created: ${rows[0].email} (id: ${rows[0].id})`);
 
@@ -91,7 +110,7 @@ async function main() {
 
   console.log('\nDone! You can now sign in with:');
   console.log('  Email:    helvent_art@163.com');
-  console.log('  Password: @Me_Helvent26%_x');
+  console.log('  Password: (set in .env.local SUPABASE_DB_PASSWORD)');
 
   await client.end();
 }
