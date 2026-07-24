@@ -1,0 +1,154 @@
+---
+title: 'Helvent 博客诞生记'
+slug: 'helvent-blog-birth'
+excerpt: '从想法到实现，记录 Helvent.赫尔文特 博客网站的完整构建历程。'
+date: '2026-07-20'
+category: '技术'
+tags: ['Next.js', 'Supabase', 'Tailwind']
+published: true
+featured: true
+---
+
+# Helvent 博客诞生记
+
+## 前言
+
+欢迎来到 **Helvent.赫尔文特**！这是我的个人博客，一个探索科技与艺术交汇点的数字空间。今天，我想和你分享这个网站从无到有的完整构建过程——每一个技术选型的背后，都有一次反复的权衡与思考。
+
+## 为什么做博客？
+
+在 AI 工具触手可及的时代，写博客似乎成了一件"不够高效"的事情。但恰恰相反，我认为它比以往任何时候都更重要：
+
+- **知识沉淀**：碎片化的阅读容易，系统化的输出困难。写作是最快的学习方式
+- **社区连接**：一篇好文章可以连接千里之外的同好者
+- **个人品牌**：技术人的数字名片，比任何简历都有说服力
+
+## 技术选型
+
+经过对多个方案的比较，最终确定了以下技术栈：
+
+| 层级 | 选择 | 理由 |
+|------|------|------|
+| 前端框架 | Next.js 16 | App Router + Turbopack 稳定化，SSR 性能飞跃 |
+| 样式方案 | Tailwind CSS v4 | 原子化 CSS，支持暗色主题无缝切换 |
+| 数据库 | Supabase + PostgreSQL | 内置 Auth + RLS，开发体验极佳 |
+| 内容存储 | MDX + Supabase | 富文本编辑与结构化数据并存 |
+| 部署平台 | Vercel | 与 Next.js 原生集成，全球边缘网络 |
+
+### 为什么选择 Supabase 而非自建？
+
+最初我也考虑过自己部署 PostgreSQL，但在对比了以下因素后改变了想法：
+
+```typescript
+// Supabase Admin Client - 极简的全栈接口
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+// 一行代码完成查询
+const { data: posts } = await supabase
+  .from('posts')
+  .select(`
+    *,
+    author:profiles(full_name, avatar_url),
+    categories(name),
+    tags(name)
+  `)
+  .eq('status', 'published')
+  .order('published_at', { ascending: false });
+```
+
+Supabase 的 Realtime 订阅功能也为未来实时评论系统预留了可能性。
+
+## UI 设计理念
+
+Helvent 采用了 **深空宇宙** 主题，以 #0a0e1a 为底色，搭配霓虹青色 (#00ffc8) 和霓虹紫色 (#bf5af2) 作为主色调。这种设计的核心优势在于：
+
+1. **降低视觉疲劳**：长时间阅读时，深色背景比白色更舒适
+2. **突出内容层次**：霓虹色标注关键信息，形成清晰的视觉引导
+3. **科技美感**：与博客的技术定位高度契合
+
+```css
+/* 霓虹辉光效果 */
+.cosmic-glow {
+  box-shadow:
+    0 0 5px rgba(0, 255, 200, 0.3),
+    0 0 20px rgba(0, 255, 200, 0.1),
+    inset 0 0 5px rgba(0, 255, 200, 0.05);
+}
+```
+
+## 开发中的关键挑战
+
+### 1. 响应式暗色主题
+
+Tailwind CSS v4 的 CSS-first 配置方式让暗色主题的实现变得异常简单：
+
+```css
+@theme {
+  --color-cosmic-bg: #0a0e1a;
+  --color-cosmic-surface: #12182b;
+  --color-neon-cyan: #00ffc8;
+  --color-neon-purple: #bf5af2;
+}
+```
+
+### 2. MDX 内容渲染管道
+
+将 MDX 安全地渲染为 React 组件需要一个精心设计的管道：
+
+```typescript
+import { serialize } from 'next-mdx/remote';
+import { MDXRemote } from 'next-mdx/remote/rsc';
+
+export async function getPostBySlug(slug: string) {
+  const { data } = await supabase
+    .from('posts')
+    .select('body_markdown')
+    .eq('slug', slug)
+    .single();
+
+  const mdxSource = await serialize(data.body_markdown, {
+    mdxOptions: {
+      remarkPlugins: [remarkGfm],
+      rehypePlugins: [
+        rehypeSlug,
+        rehypeAutolinkHeadings,
+        rehypeHighlight,
+      ],
+    },
+  });
+
+  return mdxSource;
+}
+```
+
+### 3. RLS 策略设计
+
+Supabase 的行级安全（RLS）是数据安全的核心。在测试阶段，我专门编写了一个验证清单：
+
+- 未登录用户只能看到已发布、未删除的文章
+- 普通用户可以提交评论和联系表单
+- 认证用户才能上传图片和管理自己的文章
+- 管理员（service_role）拥有所有权限
+
+## 下一步
+
+目前版本完成了核心功能：文章发布、分类标签、评论系统和联系表单。接下来的迭代方向包括：
+
+- [ ] RSS / Atom 订阅源
+- [ ] 站内搜索（基于 pg_trgm 全文搜索）
+- [ ] OpenGraph 元数据自动抓取
+- [ ] 国际化多语言支持（EN / ZH）
+- [ ] 文章阅读时间估算与进度追踪
+
+## 写在最后
+
+Helvent.赫尔文特 不仅仅是一个博客网站，更是一次对技术和美学边界的探索。每一次代码提交、每一篇文字输出，都在让这个空间变得更加丰富。
+
+感谢你读到这里。如果你也对这个项目感兴趣，欢迎通过页面的联系方式与我交流，或者直接在评论区留下你的想法。
+
+> **记住：最好的开始时间是十年前，其次是现在。** — 一个被引用了无数次却依然正确的道理

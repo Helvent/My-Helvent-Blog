@@ -1,0 +1,423 @@
+---
+title: 'Supabase + Next.js 全栈博客搭建指南'
+slug: 'supabase-nextjs-blog-guide'
+excerpt: '手把手教你用 Supabase 和 Next.js 构建一个生产级的全栈博客。'
+date: '2026-07-12'
+category: '全栈'
+tags: ['Supabase', 'Next.js', 'PostgreSQL']
+published: true
+featured: false
+---
+
+# Supabase + Next.js 全栈博客搭建指南
+
+## 引言
+
+在全栈开发领域，**Supabase** 和 **Next.js** 的组合堪称 2026 年的黄金搭档。一个提供了完整的后端能力（数据库、认证、存储、实时推送），另一个提供了最先进的 React SSR 框架。本文将带你从零开始，一步步构建一个生产级的博客系统。
+
+## 第一步：项目初始化
+
+```bash
+# 创建 Next.js 项目（使用 TypeScript 和 App Router）
+npx create-next-app@latest helvent-blog \
+  --typescript \
+  --app \
+  --tailwind \
+  --eslint \
+  --src-dir \
+  --import-alias "@/*"
+
+cd helvent-blog
+
+# 安装 Supabase 客户端
+npm install @supabase/supabase-js @supabase/ssr
+
+# 安装 MDX 支持（用于文章编辑）
+npm install gray-matter react-markdown rehype-slug rehype-autolink-headings rehype-highlight remark-gfm
+```
+
+## 第二步：Supabase 项目配置
+
+### 2.1 创建项目并获取凭据
+
+访问 [supabase.com](https://supabase.com) 创建新项目，然后在项目 Settings → API 中找到：
+
+- `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
+- `anon public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `service_role` key → `SUPABASE_SERVICE_ROLE_KEY`（仅服务端）
+
+### 2.2 环境配置文件
+
+```bash
+# .env.local
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbG...
+SUPABASE_SERVICE_ROLE_KEY=eyJKV...
+```
+
+```bash
+# .gitignore — 切记不要提交密钥
+.env.local
+node_modules/
+.next/
+```
+
+### 2.3 初始化数据库
+
+将 `seeds/sql-schema.sql` 的内容粘贴到 Supabase Dashboard 的 SQL Editor 中执行。这一步会创建所有表、RLS 策略、索引和 Storage Bucket。
+
+```sql
+-- 快速验证表是否创建成功
+SELECT table_name 
+FROM information_schema.tables 
+WHERE table_schema = 'public'
+ORDER BY table_name;
+```
+
+预期输出应包含：`profiles`, `posts`, `categories`, `tags`, `post_categories`, `post_tags`, `comments`, `contact_messages`, `media_assets`。
+
+## 第三步：Supabase 客户端封装
+
+这是整个项目的基石。我们需要为三种不同的运行环境提供客户端实例：
+
+### 3.1 Admin Client（服务端完全权限）
+
+```typescript
+// src/lib/supabase/admin.ts
+import "server-only";
+import { createClient } from "@supabase/supabase-js";
+
+let client: ReturnType<typeof createClient> | null = null;
+
+export function createAdminClient() {
+  if (!client) {
+    client = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+  }
+  return client;
+}
+```
+
+### 3.2 Server Client（带 Cookie 认证的 SSR）
+
+```typescript
+// src/lib/supabase/server.ts
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+export async function createClient() {
+  const cookieStore = await cookies();
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
+            // Server Components 无法设置 Cookie
+          }
+        },
+      },
+    }
+  );
+}
+```
+
+### 3.3 Client Component 封装
+
+```typescript
+// src/lib/supabase/client.ts
+import { createBrowserClient } from "@supabase/ssr";
+
+export function createClientComponent() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
+```
+
+## 第四步：Type 定义
+
+强类型是生产级应用的生命线。
+
+```typescript
+// src/lib/supabase/types.ts
+export interface Database {
+  public: {
+    Tables: {
+      profiles: {
+        Row: {
+          id: string;
+          email: string;
+          full_name: string | null;
+          headline: string | null;
+          bio: string | null;
+          avatar_url: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['profiles']['Row'], 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['profiles']['Insert']>;
+      };
+      posts: {
+        Row: {
+          id: string;
+          title: string;
+          slug: string;
+          excerpt: string | null;
+          body_markdown: string;
+          cover_image: string | null;
+          status: 'draft' | 'published' | 'archived';
+          featured: boolean;
+          published_at: string | null;
+          author_id: string | null;
+          meta_title: string | null;
+          meta_description: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+      };
+      categories: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          description: string | null;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      tags: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      comments: {
+        Row: {
+          id: string;
+          post_id: string;
+          author_name: string;
+          author_email: string | null;
+          content: string;
+          is_approved: boolean;
+          parent_comment_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+    };
+    Views: {};
+    Functions: {};
+    Enums: {
+      content_status: 'draft' | 'published' | 'archived';
+    };
+  };
+}
+```
+
+## 第五步：核心功能实现
+
+### 5.1 获取已发布文章列表
+
+```typescript
+// src/lib/posts.ts
+import { createClient } from '@/lib/supabase/admin';
+
+export async function getPublishedPosts(params?: {
+  page?: number;
+  limit?: number;
+  category?: string;
+  tag?: string;
+}) {
+  const supabase = createClient();
+  const { page = 1, limit = 12, category, tag } = params ?? {};
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  let query = supabase
+    .from('posts')
+    .select(`
+      *,
+      author:profiles!posts_author_id_fkey(full_name, avatar_url),
+      categories(post_categories!inner(category_id, categories(*))),
+      tags(post_tags!inner(tag_id, tags(*)))
+    `, { count: 'exact' })
+    .eq('status', 'published')
+    .is('deleted_at', null)
+    .order('published_at', { ascending: false })
+    .range(from, to);
+
+  if (category) {
+    query = query.eq('categories.categories.slug', category);
+  }
+
+  if (tag) {
+    query = query.eq('tags.tags.slug', tag);
+  }
+
+  const { data, error, count } = await query;
+
+  if (error) throw error;
+
+  return {
+    posts: data ?? [],
+    total: count ?? 0,
+    page,
+    totalPages: Math.ceil((count ?? 0) / limit),
+  };
+}
+```
+
+### 5.2 渲染 MDX 文章
+
+```typescript
+// src/components/MDXContent.tsx
+'use client';
+
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeSlug from 'rehype-slug';
+import rehypeAutolinkHeadings from 'rehype-autolink-headings';
+import rehypeHighlight from 'rehype-highlight';
+import { MDXRemote, MDXRemoteSerializeResult } from 'next-mdx/remote/rsc';
+
+export function MDXContent({ source }: { source: MDXRemoteSerializeResult }) {
+  return (
+    <MDXRemote
+      source={source}
+      components={{
+        h1: (props) => <h1 className="text-3xl font-bold text-white mt-8 mb-4" {...props} />,
+        h2: (props) => <h2 className="text-2xl font-bold text-neon-cyan mt-6 mb-3" {...props} />,
+        h3: (props) => <h3 className="text-xl font-semibold text-white mt-4 mb-2" {...props} />,
+        code: ({ className, children, ...props }) => {
+          const match = /language-(\w+)/.exec(className || '');
+          return match ? (
+            <pre className="bg-cosmic-surface rounded-lg p-4 my-4 overflow-x-auto">
+              <code className={className} {...props}>
+                {children}
+              </code>
+            </pre>
+          ) : (
+            <code className="bg-cosmic-surface px-1.5 py-0.5 rounded text-neon-cyan text-sm" {...props}>
+              {children}
+            </code>
+          );
+        },
+        a: (props) => <a className="text-neon-cyan underline hover:text-neon-purple" target="_blank" rel="noopener noreferrer" {...props} />,
+      }}
+    />
+  );
+}
+```
+
+### 5.3 用户注册与自动创建 Profile
+
+得益于我们在 schema 中定义的触发器，用户注册后会自动生成对应的 profile 记录，无需任何额外代码：
+
+```typescript
+// app/auth/signup/action.ts
+'use server';
+
+import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
+
+export async function signup(formData: FormData) {
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+  const fullName = formData.get('full_name') as string;
+
+  const supabase = createClient();
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        full_name: fullName,
+      },
+    },
+  });
+
+  if (error) throw error;
+  redirect('/auth/callback');
+}
+```
+
+## 第六步：部署与运维
+
+### 6.1 部署到 Vercel
+
+```bash
+# 安装 Vercel CLI
+npm i -g vercel
+
+# 登录并部署
+vercel login
+vercel --prod
+```
+
+在 Vercel 的 Project Settings 中添加环境变量：
+
+| 变量名 | 来源 |
+|--------|------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase Dashboard |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Dashboard |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Dashboard（不可公开） |
+
+### 6.2 监控与告警
+
+Supabase 内置了用量监控，在 Dashboard 的 Usage 页面可以查看：
+
+- API 请求次数
+- 数据库存储空间
+- 流量带宽
+- Auth 月活用户数
+
+免费套餐的上限对于个人博客来说绰绰有余：
+- 1 GB 数据库
+- 50 GB/月 流量
+- 50,000 MAU
+
+## 总结
+
+通过以上六个步骤，你已经拥有了一个完整的、生产级的全栈博客系统：
+
+```
+技术栈全景：
+├── 前端：  Next.js 16 + React 19 + Tailwind CSS v4
+├── 数据：  PostgreSQL (Supabase)
+├── 认证：  Supabase Auth (JWT + Cookie)
+├── 存储：  Supabase Storage (blog-images bucket)
+├── 内容：  MDX + gray-matter 渲染管道
+└── 部署：  Vercel Edge Network
+```
+
+这个架构的优势在于 **极简的后端代码量** 和 **极强的扩展性**。随着博客的增长，你可以轻松添加：
+
+- Supabase Realtime → 实时评论通知
+- Edge Functions → AI 摘要生成
+- RLS Policies → 精细化的权限控制
+
+编码愉快！🎨✨

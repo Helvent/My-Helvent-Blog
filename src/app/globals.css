@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+/* ── Helvent Cosmic Theme ── */
+:root {
+  --void-dark: #0a0a0f;
+  --void-elevated: #12121a;
+  --neon-purple: #b44aff;
+  --neon-cyan: #00f0ff;
+  --glass-bg: rgba(10, 10, 15, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --text-primary: #f0f0f5;
+  --text-secondary: rgba(240, 240, 245, 0.6);
+}
+
+@theme inline {
+  --color-void-dark: #0a0a0f;
+  --color-void-elevated: #12121a;
+  --color-neon-purple: #b44aff;
+  --color-neon-cyan: #00f0ff;
+  --color-glass-bg: rgba(10, 10, 15, 0.6);
+  --color-glass-border: rgba(255, 255, 255, 0.08);
+  --color-text-primary: #f0f0f5;
+  --color-text-secondary: rgba(240, 240, 245, 0.6);
+  --font-sans: var(--font-noto-sc), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --animate-fade-in: fade-in 0.5s ease-out;
+  --animate-fade-in-up: fade-in-up 0.6s ease-out;
+  --animate-glow-pulse: glow-pulse 3s ease-in-out infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-star-twinkle: star-twinkle 3s ease-in-out infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes star-twinkle {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* ── Glassmorphism Utilities ── */
+@utility glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) brightness(1.1);
+  border: 1px solid var(--glass-border);
+}
+
+@utility glass-hover {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) brightness(1.1);
+  border: 1px solid var(--glass-border);
+  transition: all 0.3s ease;
+  &:hover {
+    border-color: rgba(180, 74, 255, 0.3);
+    box-shadow: 0 0 20px rgba(180, 74, 255, 0.1);
+  }
+}
+
+@utility neon-glow-purple {
+  box-shadow: 0 0 15px rgba(180, 74, 255, 0.3),
+              0 0 30px rgba(180, 74, 255, 0.1);
+}
+
+@utility neon-glow-cyan {
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.3),
+              0 0 30px rgba(0, 240, 255, 0.1);
+}
+
+@utility text-gradient {
+  background: linear-gradient(135deg, var(--neon-purple), var(--neon-cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Base Styles ── */
+body {
+  background: var(--void-dark);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(180, 74, 255, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(180, 74, 255, 0.5);
+}
+
+/* ── Selection ── */
+::selection {
+  background: rgba(0, 240, 255, 0.2);
+  color: var(--text-primary);
+}
+
+/* ── Highlight.js Theme Override (for code blocks) ── */
+.hljs {
+  background: rgba(10, 10, 15, 0.8) !important;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 1.5em !important;
+}

@@ -1,0 +1,278 @@
+---
+title: 'Next.js 16 新特性全解析'
+slug: 'nextjs-16-guide'
+excerpt: '深度解析 Next.js 16 的重大更新，包括 Turbopack 稳定化、React 19 集成等。'
+date: '2026-07-18'
+category: '前端'
+tags: ['Next.js', 'React']
+published: true
+featured: false
+---
+
+# Next.js 16 新特性全解析
+
+## 引言
+
+Next.js 16 是这个生态系统中最令人兴奋的一次大版本更新。从 Turbopack 的稳定化到与 React 19 的原生集成，每一个改动都直指开发者体验的核心痛点。本文将逐一拆解这些新特性，并附上实际可用的代码示例。
+
+## 1. Turbopack 正式稳定
+
+在经历了数个开发版本的打磨后，Turbopack 终于在 Next.js 16 中成为生产环境的默认打包器。这意味着什么？
+
+### 冷启动与热更新的速度差异
+
+```bash
+# Next.js 15 (Webpack)
+$ next dev
+✓ Compiled in 4.2s
+
+# Next.js 16 (Turbopack)
+$ next dev --turbo
+✓ Compiled in 0.8s
+```
+
+开发时的热更新速度提升更为显著：单文件修改的编译时间从 ~800ms 降到了 ~50ms。对于大型项目而言，这种体验提升无法用夸张的手法来形容。
+
+### 迁移指南
+
+如果你的项目使用了自定义 Webpack 配置，需要注意以下几点：
+
+```javascript
+// next.config.ts — Next.js 15 时代的配置
+const config = {
+  webpack: (config) => {
+    config.module.rules.push({
+      test: /\.svg$/,
+      use: ['@svgr/webpack'],
+    });
+    return config;
+  },
+};
+```
+
+```typescript
+// next.config.ts — Next.js 16 使用 Vite Plugin 替代
+import { viteSingleFile } from 'vite-plugin-singlefile';
+
+const config = {
+  experimental: {
+    // Turbopack 不再支持自定义 webpack loader
+    // 改用 @next/swc-loader 或 Vite 插件体系
+  },
+};
+
+export default config;
+```
+
+> **关键点**：Turbopack 基于 Rust 实现，它不再使用 Webpack 的 loader/plugin 体系。你需要将自定义逻辑迁移到 swc 插件或 Vite 兼容方案中。
+
+## 2. React 19 原生集成
+
+React 19 带来了大量的突破性 API，而 Next.js 16 是第一个将它们全部原生集成的框架版本。
+
+### Server Components 成为默认
+
+在 Next.js 16 中，所有页面组件默认都是 **React Server Components (RSC)**，除非你显式添加 `"use client"` 指令：
+
+```typescript
+// app/posts/[slug]/page.tsx — 默认就是 Server Component
+
+import { createClient } from '@/lib/supabase/server';
+
+// ✅ 直接访问数据库
+export default async function PostPage({ params }: { params: { slug: string } }) {
+  const supabase = createClient();
+  
+  const { data: post } = await supabase
+    .from('posts')
+    .select('*')
+    .eq('slug', params.slug)
+    .single();
+
+  if (!post) return <NotFound />;
+
+  return (
+    <article className="prose prose-invert max-w-none">
+      <h1>{post.title}</h1>
+      <PostContent markdown={post.body_markdown} />
+    </article>
+  );
+}
+```
+
+### React Hooks 的新范式
+
+```typescript
+'use client';
+
+import { useState, useEffect, use, useFormStatus } from 'react';
+
+// 1. use() — 在客户端组件中消费 Promise
+async function UserAvatar({ userId }: { userId: Promise<string> }) {
+  const id = use(userId);
+  // ...
+}
+
+// 2. useFormStatus() — 表单状态hook，告别 loading 手动管理
+function SubmitButton() {
+  const { pending, data, action } = useFormStatus();
+  
+  return (
+    <button disabled={pending} type="submit">
+      {pending ? '提交中...' : '提交'}
+    </button>
+  );
+}
+
+// 3. useActionState() — 取代 useReducer 处理表单状态
+function Counter() {
+  const [count, dispatch] = useActionState(
+    (state, _payload) => state + 1,
+    0
+  );
+  
+  return <button formAction={dispatch}>+1</button>;
+}
+```
+
+## 3. 中间件增强
+
+Next.js 16 的中间件系统进行了重大升级，新增了以下能力：
+
+### 正则表达式路由匹配
+
+```typescript
+// middleware.ts
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+export function middleware(request: NextRequest) {
+  // 匹配 /api/v1/* 和 /api/v2/*
+  if (request.nextUrl.pathname.match(/^\/api\/v\d+\/.*/)) {
+    const token = request.headers.get('authorization');
+    
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+  }
+  
+  return NextResponse.next();
+}
+
+export const config = {
+  // matcher 支持 glob 语法
+  matcher: ['/api/:path*', '/blog/:path*'],
+};
+```
+
+### Locale 中间件优化
+
+```typescript
+// middleware.ts — Next.js 16 locale 模式
+import createMiddleware from 'next-intl/middleware';
+
+export default createMiddleware({
+  locales: ['zh-CN', 'en-US'],
+  defaultLocale: 'zh-CN',
+  localePrefix: 'always',
+  // 自动检测浏览器语言
+  localeDetection: true,
+});
+
+export const config = {
+  matcher: ['/((?!api|_next|.*\\..*).*)'],
+};
+```
+
+## 4. 缓存模型改进
+
+Next.js 16 简化了缓存语义，减少了开发者在内存泄漏和过期数据之间的挣扎。
+
+### 默认 cache 策略
+
+| 数据类型 | 默认缓存 | 缓存键 |
+|----------|---------|--------|
+| Page Fetchers | `force-cache` | URL + 查询参数 |
+| Route Handlers | `force-cache` | 请求方法 + URL |
+| Server Actions | `no-store` | 无（每次执行） |
+| Static Generate | `immutable` | build time |
+
+### 精确控制缓存
+
+```typescript
+// 精确控制单个请求的缓存
+async function fetchPost(slug: string) {
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/posts?slug=eq.${slug}&select=*`,
+    {
+      // 明确的缓存策略
+      cache: 'force-cache',
+      // 重新验证频率
+      next: { revalidate: 3600 },
+      // 标签-based 失效
+      next: { tags: [`post-${slug}`] },
+    }
+  );
+
+  return res.json();
+}
+
+// 在页面中使用 invalidate 主动失效
+'use server';
+
+export async function publishPost(postId: string) {
+  const supabase = createAdminClient();
+  
+  await supabase
+    .from('posts')
+    .update({ status: 'published' })
+    .eq('id', postId);
+
+  // 通知 Next.js 重新验证相关缓存
+  revalidateTag(`post-${postId}`);
+  revalidatePath('/blog');
+}
+```
+
+## 5. 图像优化新特性
+
+```typescript
+import { Image } from 'next/image';
+
+// AVIF 自动降级
+export default function HeroImage() {
+  return (
+    <Image
+      src="/images/cosmic-hero.avif"
+      alt="深空宇宙主题封面"
+      width={1920}
+      height={1080}
+      priority
+      // Next.js 16 新增：自动格式检测
+      formats={['avif', 'webp', 'jpeg']}
+      // 渐进式加载
+      loading="eager"
+      className="rounded-xl shadow-2xl"
+    />
+  );
+}
+```
+
+## 总结
+
+Next.js 16 的核心理念很清晰：**更快、更简单、更可靠**。Turbopack 的稳定化解决了最大的性能痛点，React 19 的原生集成让 Server Components 的体验更加丝滑，而简化的缓存模型则减少了很多调试陷阱。
+
+如果你还在使用 Next.js 14 或更早的版本，强烈建议规划一次升级——迁移成本通常比你想象的要低。
+
+```
+速度提升总结：
+├── 开发启动速度：  5x 更快 (4.2s → 0.8s)
+├── HMR 热更新：    16x 更快 (800ms → 50ms)  
+├── 生产构建速度：  2-3x 更快
+└── Bundle 体积：   10-20% 更小 (tree-shaking 改进)
+```
+
+保持编码，保持好奇 🚀

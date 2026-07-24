@@ -1,0 +1,19 @@
+{
+  "categories": [
+    { "name": "技术", "slug": "tech", "description": "技术相关文章" },
+    { "name": "前端", "slug": "frontend", "description": "前端开发" },
+    { "name": "全栈", "slug": "fullstack", "description": "全栈开发" },
+    { "name": "设计", "slug": "design", "description": "设计相关" },
+    { "name": "随笔", "slug": "essay", "description": "生活随笔" }
+  ],
+  "tags": [
+    { "name": "Next.js", "slug": "nextjs" },
+    { "name": "React", "slug": "react" },
+    { "name": "Supabase", "slug": "supabase" },
+    { "name": "TypeScript", "slug": "typescript" },
+    { "name": "CSS", "slug": "css" },
+    { "name": "Tailwind", "slug": "tailwind" },
+    { "name": "PostgreSQL", "slug": "postgresql" },
+    { "name": "设计系统", "slug": "design-system" }
+  ]
+}
