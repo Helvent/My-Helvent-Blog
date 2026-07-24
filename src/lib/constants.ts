@@ -5,7 +5,6 @@ export const SITE = {
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://helvent.vercel.app",
   locale: "zh-CN",
   author: "Helvent",
-  ogImage: "/images/og.jpg",
   links: {
     github: "https://github.com/Helvent",
     email: "helvent_art@163.com",
